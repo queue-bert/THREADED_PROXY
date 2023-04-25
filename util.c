@@ -234,6 +234,11 @@ void connect_and_send(int *client_socket_fd) {
     char req_method[10], req_uri[256], req_version[10] = "HTTP/?", keep_conn[20], host[256], path[2048];
     // int port = 80;
 
+
+
+
+    char final_uri[3000];
+
     CURL *curl;
     CURLcode res;
     curl = curl_easy_init();
@@ -291,36 +296,40 @@ void connect_and_send(int *client_socket_fd) {
             if (host_start)
             {
                 host_start += 3;
-
                 char *path_start = strchr(host_start, '/');
-            if(path_start)
-            {  
-                strncpy(host, host_start, path_start - host_start);
-                host[path_start - host_start] = '\0';
-                strcpy(path, path_start);
+                if(path_start)
+                {  
+                    strncpy(host, host_start, path_start - host_start);
+                    printf("HOST: %s\n", host);
+                    host[path_start - host_start] = '\0';
+                    strcpy(path, path_start);
                 }
                 else
                 {
                     strcpy(host, host_start);
                     strcpy(path, "/");
                 }
+                sprintf(final_uri, "%s%s", host, path);
+                printf("URI to Pass %s\n:", final_uri);
             }
             else
             {
-                host_start = strstr(req_uri, "Host:") + 5;
-                sscanf(host_start, "%s", path);
-                // host_start = req_uri;
-                // handle this error when the URL doesn't exist
+                host_start = strstr(req_uri, "Host:");
+                if(host_start)
+                {
+                    sscanf(host_start, "%s", path);
+                    sprintf(final_uri, "%s%s", req_uri, path);
+                    printf("URI to Pass %s\n:", req_uri);
+                }
+                else
+                {
+                    int n = sprintf(buffer, "%s 400 Bad Request\r\n\r\n", req_version);
+                    sendall(client_socket, buffer, &n);
+                    curl_easy_cleanup(curl);
+                    return;
+                }
+                
             }
-
-            
-
-            // char *port_start = strchr(host, ':');
-            // if(port_start)
-            // {
-            //     *port_start = '\0';
-            //     port = atoi(port_start + 1);
-            // }
 
             if(is_host_blocked(host))
             {
@@ -344,7 +353,7 @@ void connect_and_send(int *client_socket_fd) {
                     .client_socket = client_socket,
                     .status = 0,
                     .filename = get_file_url(req_uri),
-                    .url = req_uri,
+                    .url = final_uri,
                     .curl = curl,
                     .fp = -1,
                     .lock = NULL,
