@@ -50,10 +50,12 @@ int main(int argc, char **argv) {
   curl_global_init(CURL_GLOBAL_DEFAULT);
 
 
-  if (argc != 2) {
-    fprintf(stderr, "usage: %s <port_num>\n", argv[0]);
+  if (argc != 3) {
+    fprintf(stderr, "usage: %s <port_num> <cache-expire>\n", argv[0]);
     exit(1);
   }
+
+  expire = atoi(argv[2]);
 
   if((status = getaddrinfo(NULL, argv[1], &hints, &res)) != 0)
   {
