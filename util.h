@@ -74,6 +74,8 @@ void * thread_function();
 
 size_t check_and_write(char *ptr, size_t size, size_t nmemb, void *userdata);
 
+size_t header_callback(char *buffer, size_t size, size_t nitems, void *userdata);
+
 char *get_hashed_filename(const char *path);
 
 int file_exists(const char *filepath);

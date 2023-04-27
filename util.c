@@ -29,8 +29,10 @@ int sendall(int s, char *buf, int *len)
 
     while(total < *len)
     {
+        printf("writing to %d\n", s);
         if((n = send(s, buf+total, bytesleft, 0)) <= 0)
         {
+            printf("error writing to %d\n", s);
             break;
         }
         else
@@ -87,12 +89,12 @@ size_t check_and_write(char *ptr, size_t size, size_t nmemb, void *userdata)
             char * hash = get_hashed_filename(data->url);
             char filename[256];
             snprintf(filename, sizeof(filename), "./cache/%s", hash);
-            printf("FILENAME: %s\n", filename);
+            // printf("FILENAME: %s\n", filename);
 
             data->fp = open(filename, O_WRONLY | O_CREAT | O_APPEND, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
             if(data->fp == -1)
             {
-                fprintf(stderr, "Failed to open the file");
+                fprintf(stderr, "Failed to open the file\n");
                 exit(1);
             }
             // UNLOCK WRITING OUTSIDE OF FUNCTION
@@ -104,10 +106,10 @@ size_t check_and_write(char *ptr, size_t size, size_t nmemb, void *userdata)
     {
         if(data->fp == -1)
         {
-            printf("DELETING");
+            // printf("DELETING");
             data->fp = open(data->filename, O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
             if (data->fp == -1) {
-                fprintf(stderr, "Failed to open the file");
+                fprintf(stderr, "Failed to open the file\n");
                 exit(1);
             }
             close(data->fp);
@@ -116,7 +118,7 @@ size_t check_and_write(char *ptr, size_t size, size_t nmemb, void *userdata)
             data->fp = open(data->filename, O_WRONLY | O_CREAT | O_APPEND, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
             if (data->fp == -1)
             {
-                fprintf(stderr, "Failed to open the file");
+                fprintf(stderr, "Failed to open the file\n");
                 exit(1);
             }
         }
@@ -190,7 +192,7 @@ my_rwlock_t *get_file_rwlock(const char *filename) {
     while (current) {
         if (strcmp(current->filename, filename) == 0) {
             pthread_mutex_unlock(&list_mutex);
-            printf("GOT LOCK FOR: %s\n",filename);
+            // printf("GOT LOCK FOR: %s\n",filename);
             return &current->rwlock;
         }
         current = current->next;
@@ -201,7 +203,7 @@ my_rwlock_t *get_file_rwlock(const char *filename) {
     new_entry->filename = malloc(filename_len + 1);
     strcpy(new_entry->filename, filename);
     my_rwlock_init(&new_entry->rwlock);
-    printf("MAKING LOCK FOR: %s\n",filename);
+    // printf("MAKING LOCK FOR: %s\n",filename);
     new_entry->next = file_rwlock_list;
     file_rwlock_list = new_entry;
 
@@ -221,6 +223,57 @@ void free_file_rwlock_list() {
 }
 
 
+// size_t header_function(char * ptr, size_t size, size_t nmemb, void * userdata)
+// {
+//     size_t realsize = size * nmemb;
+
+// }
+
+// perhaps i could give everythread it's own curl object and then just have them set the URL everytime to
+//reuse it
+
+size_t header_callback(char *buffer, size_t size, size_t nitems, void *userdata) {
+    size_t bytes = size * nitems;
+    callback_data *data = (callback_data *)userdata;
+    char * end_ptr;
+    int length;
+
+    // Check for the initial response line
+
+    if ((end_ptr = strstr(buffer, "\r\n\r\n")))
+    {
+        snprintf(end_ptr, "%s", "\r\nConnection: close");
+        length = (int)strlen(buffer);
+        printf("String: %s, length: %d\n", buffer, length);
+        write(data->fp, buffer, sizeof(length));
+        return sendall(data->client_socket, buffer, &length) ? 0 : bytes;
+    }
+
+
+    
+
+    // if (strncmp(buffer, "HTTP/", 5) == 0) {
+    //     char response_line[256];
+    //     strncpy(response_line, buffer, bytes);
+    //     response_line[bytes] = '\0';
+    //     sendall(data->client_socket, response_line, (int *)&bytes);
+    //     // Add Connection header with keep-alive
+    //     char connection_header[25] = "Connection: close\r\n";
+    //     int connection_header_len = sizeof(connection_header) - 1;
+    //     sendall(data->client_socket, connection_header, &connection_header_len);
+    //     return bytes;
+    // }
+
+    // // Process desired headers
+    // if (strncasecmp(buffer, "Content-Type:", 13) == 0 ||
+    //     strncasecmp(buffer, "Content-Length:", 15) == 0) {
+    //     sendall(data->client_socket, buffer, (int *)&bytes);
+    // }
+
+    write(data->fp, buffer, bytes);
+    return sendall(data->client_socket, buffer, (int *)&bytes) ? 0 : bytes;
+}
+
 
 
 void connect_and_send(int *client_socket_fd) {
@@ -233,10 +286,6 @@ void connect_and_send(int *client_socket_fd) {
     timeout.tv_usec = 0;
     char req_method[10], req_uri[256], req_version[10] = "HTTP/?", keep_conn[20], host[256], path[2048];
     // int port = 80;
-
-
-
-
     char final_uri[3000];
 
     CURL *curl;
@@ -248,6 +297,13 @@ void connect_and_send(int *client_socket_fd) {
 
         for (;;) {
             memset(buffer, 0, BUFSIZE+1);
+            memset(req_method, 0, sizeof(req_method));
+            memset(req_uri, 0, sizeof(req_uri));
+            memset(req_version, 0, sizeof(req_version));
+            memset(keep_conn, 0, sizeof(keep_conn));
+            memset(host, 0, sizeof(host));
+            memset(path, 0, sizeof(path));
+            memset(final_uri, 0, sizeof(final_uri));
             msg_size = 0;
             buffer[BUFSIZE] = '\0';
 
@@ -255,7 +311,8 @@ void connect_and_send(int *client_socket_fd) {
             {
                 if(check((n_read = read(client_socket, buffer+msg_size, sizeof(buffer)-msg_size-1)), "CONNECTION TIMEOUT"))
                 {
-                    close(client_socket);
+                    // close(client_socket);
+                    printf("FAILED CLOSING CLIENT SOCKET %d\n", client_socket);
                     curl_easy_cleanup(curl);
                     return;
                 }
@@ -263,19 +320,15 @@ void connect_and_send(int *client_socket_fd) {
                 if(msg_size > BUFSIZE - 1 || strstr(buffer, "\r\n\r\n")) break;
             }
 
-            if (n_read <= 0) {
-                close(client_socket);
-                curl_easy_cleanup(curl);
-                return;
-            }
+            // printf("REQUEST: %s\n", buffer);
 
             if(sscanf(buffer, "%s %s %s", req_method, req_uri, req_version) < 3)
             {
                 int n = sprintf(buffer, "%s 400 Bad Request\r\n\r\n", req_version);
                 sendall(client_socket, buffer, &n);
-                curl_easy_cleanup(curl);
-                return;
+                continue;
             }
+
             printf("\nRequest received:\n%s %s %s\n", req_method, req_uri, req_version);
             char *connection_header = strstr(buffer, "Connection:"); // or "Proxy-Connection"
             if (connection_header) {
@@ -284,11 +337,11 @@ void connect_and_send(int *client_socket_fd) {
                 strcpy(keep_conn, strcmp(req_version, "HTTP/1.1") == 0 ? "keep-alive" : "close");
             }
 
-            if (strcmp(req_version, "HTTP/1.1") != 0 && strcmp(req_version, "HTTP/1.0") != 0) {
+            if (strcmp(req_version, "HTTP/1.1") != 0 && strcmp(req_version, "HTTP/1.0") != 0)
+            {
                 int n = sprintf(buffer, "%s 505 HTTP Version Not Supported\r\n\r\n", req_version);
                 sendall(client_socket, buffer, &n);
-                curl_easy_cleanup(curl);
-                return;
+                continue;
             }
 
 
@@ -300,7 +353,7 @@ void connect_and_send(int *client_socket_fd) {
                 if(path_start)
                 {  
                     strncpy(host, host_start, path_start - host_start);
-                    printf("HOST: %s\n", host);
+                    // printf("HOST: %s\n", host);
                     host[path_start - host_start] = '\0';
                     strcpy(path, path_start);
                 }
@@ -310,50 +363,56 @@ void connect_and_send(int *client_socket_fd) {
                     strcpy(path, "/");
                 }
                 sprintf(final_uri, "%s%s", host, path);
-                printf("URI to Pass %s\n:", final_uri);
+                // printf("URI to Pass %s\n:", final_uri);
             }
             else
             {
-                host_start = strstr(req_uri, "Host:");
+                host_start = strstr(buffer, "Host:");
                 if(host_start)
                 {
-                    sscanf(host_start, "%s", path);
-                    sprintf(final_uri, "%s%s", req_uri, path);
-                    printf("URI to Pass %s\n:", req_uri);
+                    // Within Host: Parser
+                    sscanf(host_start + 5, "%s", host);
+                    strcpy(path, "/"); // added this
+                    sprintf(final_uri, "%s%s", host, req_uri);
+                    // printf("URI to Pass %s\n:", final_uri);
                 }
                 else
                 {
                     int n = sprintf(buffer, "%s 400 Bad Request\r\n\r\n", req_version);
                     sendall(client_socket, buffer, &n);
-                    curl_easy_cleanup(curl);
-                    return;
+                    continue;
                 }
                 
             }
 
-            if(is_host_blocked(host))
+            int port = 80; // default port
+            char* port_start = strchr(host, ':');
+            if (port_start)
             {
-                // printf("BLCOKED");
-                int n = sprintf(buffer, "%s 403 Forbidden\r\n\r\n", req_version);
-                sendall(client_socket, buffer, &n);
-                close(client_socket);
-                curl_easy_cleanup(curl);
-                return;
+                *port_start = '\0';
+                port_start++;
+                char* endptr;
+                port = strtol(port_start, &endptr, 10);
+                if (*endptr != '\0' && *endptr != '\r' && *endptr != '\n') {
+                    port = 80;
+                }
             }
 
-            // char *host_header = strstr(buffer, "Host:");
-            // if (host_header) {
-            //     sscanf(host_header + 5, "%s", host);
-            // } else {
-            //     strcpy(host, );
-            // }
+            if(is_host_blocked(host))
+            {
+                int n = sprintf(buffer, "%s 403 Forbidden\r\n\r\n", req_version);
+                sendall(client_socket, buffer, &n);
+                continue;
+            }
 
 
             callback_data data = {
                     .client_socket = client_socket,
                     .status = 0,
-                    .filename = get_file_url(req_uri),
-                    .url = final_uri,
+                    // .filename = get_file_url(final_uri),
+                    .filename = get_file_url(path),
+                    // .url = final_uri,
+                    .url = path,
                     .curl = curl,
                     .fp = -1,
                     .lock = NULL,
@@ -396,40 +455,47 @@ void connect_and_send(int *client_socket_fd) {
                 // printf("WRITE LOCKING FILENAME: %s\n", filename);
                 data.lock = get_file_rwlock(filename);
                 my_rwlock_wrlock(data.lock);
-                curl_easy_setopt(curl, CURLOPT_URL, data.url);
+                // curl_easy_setopt(curl, CURLOPT_URL, data.url);
+                curl_easy_setopt(curl, CURLOPT_URL, final_uri);
                 curl_easy_setopt(curl, CURLOPT_HEADER, 1L);
                 curl_easy_setopt(curl, CURLOPT_PROXY, "");
-                curl_easy_setopt(curl, CURLOPT_MAXCONNECTS, 5L);
+                curl_easy_setopt(curl, CURLOPT_PORT, port);
+                curl_easy_setopt(curl, CURLOPT_VERBOSE, 1L);
+                // curl_easy_setopt(curl, CURLOPT_MAXCONNECTS, 5L);
+                curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, header_callback);
+                curl_easy_setopt(curl, CURLOPT_HEADERDATA, (void *) &data);
                 curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, check_and_write);
                 curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *) &data);
                 res = curl_easy_perform(curl);
-                if(data.lock != NULL)
-                {
-                    my_rwlock_unlock(data.lock);
-                }
+                my_rwlock_unlock(data.lock);
                 free(hash);
+
                 if (res != CURLE_OK) {
                     printf("NOT OK");
                     int n = sprintf(buffer, "%s 404 Not Found\r\n\r\n", req_version);
                     sendall(client_socket, buffer, &n);
-                    break;
+                    continue;
+                    // break;
                 }
 
-                long response_code;
-                curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &response_code);
-                double content_length;
-                curl_easy_getinfo(curl, CURLINFO_CONTENT_LENGTH_DOWNLOAD, &content_length);
-                const char *content_type;
-                curl_easy_getinfo(curl, CURLINFO_CONTENT_TYPE, &content_type);
+                // long response_code;
+                // curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &response_code);
+                // double content_length;
+                // curl_easy_getinfo(curl, CURLINFO_CONTENT_LENGTH_DOWNLOAD, &content_length);
+                // const char *content_type;
+                // curl_easy_getinfo(curl, CURLINFO_CONTENT_TYPE, &content_type);
 
-                int n = sprintf(buffer, "%s %ld OK\r\nContent-Type: %s\r\nContent-Length: %.0f\r\nConnection: %s\r\n\r\n", req_version, response_code, content_type, content_length, keep_conn);
-                sendall(client_socket, buffer, &n);
+                // int n = sprintf(buffer, "%s %ld OK\r\nContent-Type: %s\r\nContent-Length: %.0f\r\nConnection: %s\r\n\r\n", req_version, response_code, content_type, content_length, keep_conn);
+                // sendall(client_socket, buffer, &n);
 
             } else {
                 int n = sprintf(buffer, "%s 405 Method Not Allowed\r\n\r\n", req_version);
                 sendall(client_socket, buffer, &n);
-                break;
+                continue;
+                // break;
             }
+
+            break;
 
             if (strcmp(keep_conn, "close") == 0 || strcmp(keep_conn, "Close") == 0) {
                 break;
@@ -440,7 +506,7 @@ void connect_and_send(int *client_socket_fd) {
         curl_easy_cleanup(curl);
         
     }
-    close(client_socket);
+    // close(client_socket);
 }
 
 
@@ -508,14 +574,17 @@ void * thread_function()
             }
         }
         pthread_mutex_unlock(&mutex);
+
         if(flag)
         {
+            close(*pclient);
             free(pclient);
             pthread_exit(NULL);
         }
         if(pclient != NULL)
         {
             connect_and_send(pclient);
+            close(*pclient);
             free(pclient);
         }
     }
