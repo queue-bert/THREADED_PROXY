@@ -82,49 +82,51 @@ size_t check_and_write(char *ptr, size_t size, size_t nmemb, void *userdata)
     size_t realsize = size * nmemb;
     callback_data *data = (callback_data *)userdata;
 
-    if(data->filename == NULL)
-    {
-        if(data->fp == -1)
-        {
-            char * hash = get_hashed_filename(data->url);
-            char filename[256];
-            snprintf(filename, sizeof(filename), "./cache/%s", hash);
-            // printf("FILENAME: %s\n", filename);
 
-            data->fp = open(filename, O_WRONLY | O_CREAT | O_APPEND, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
-            if(data->fp == -1)
-            {
-                fprintf(stderr, "Failed to open the file\n");
-                exit(1);
-            }
-            // UNLOCK WRITING OUTSIDE OF FUNCTION
-            free(hash);
-        }
-        write(data->fp, ptr, realsize);
-    }
-    else
-    {
-        if(data->fp == -1)
-        {
-            // printf("DELETING");
-            data->fp = open(data->filename, O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
-            if (data->fp == -1) {
-                fprintf(stderr, "Failed to open the file\n");
-                exit(1);
-            }
-            close(data->fp);
+    // if(data->filename == NULL)
+    // {
+    //     if(data->fp == -1)
+    //     {
+    //         char * hash = get_hashed_filename(data->url);
+    //         char filename[256];
+    //         snprintf(filename, sizeof(filename), "./cache/%s", hash);
+    //         // printf("FILENAME: %s\n", filename);
 
-            // Reopen the file in append mode
-            data->fp = open(data->filename, O_WRONLY | O_CREAT | O_APPEND, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
-            if (data->fp == -1)
-            {
-                fprintf(stderr, "Failed to open the file\n");
-                exit(1);
-            }
-        }
-        write(data->fp, ptr, realsize);
-    }
+    //         data->fp = open(filename, O_WRONLY | O_CREAT | O_APPEND, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+    //         if(data->fp == -1)
+    //         {
+    //             fprintf(stderr, "Failed to open the file\n");
+    //             exit(1);
+    //         }
+    //         // UNLOCK WRITING OUTSIDE OF FUNCTION
+    //         free(hash);
+    //     }
+    //     write(data->fp, ptr, realsize);
+    // }
+    // else
+    // {
+    //     if(data->fp == -1)
+    //     {
+    //         // printf("DELETING");
+    //         data->fp = open(data->filename, O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+    //         if (data->fp == -1) {
+    //             fprintf(stderr, "Failed to open the file\n");
+    //             exit(1);
+    //         }
+    //         close(data->fp);
+
+    //         // Reopen the file in append mode
+    //         data->fp = open(data->filename, O_WRONLY | O_CREAT | O_APPEND, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+    //         if (data->fp == -1)
+    //         {
+    //             fprintf(stderr, "Failed to open the file\n");
+    //             exit(1);
+    //         }
+    //     }
+    //     write(data->fp, ptr, realsize);
+    // }
     
+    write(data->fp, ptr, realsize);
     sendall(data->client_socket, ptr, (int *)&realsize);
 
     return realsize;
@@ -236,42 +238,57 @@ size_t header_callback(char *buffer, size_t size, size_t nitems, void *userdata)
     size_t bytes = size * nitems;
     callback_data *data = (callback_data *)userdata;
     char * end_ptr;
-    int length;
+    char new_buf[30];
+    // int length;
 
     // Check for the initial response line
 
-    if ((end_ptr = strstr(buffer, "\r\n\r\n")))
-    {
-        snprintf(end_ptr, "%s", "\r\nConnection: close");
-        length = (int)strlen(buffer);
-        printf("String: %s, length: %d\n", buffer, length);
-        write(data->fp, buffer, sizeof(length));
-        return sendall(data->client_socket, buffer, &length) ? 0 : bytes;
-    }
+    
 
 
     
 
-    // if (strncmp(buffer, "HTTP/", 5) == 0) {
-    //     char response_line[256];
-    //     strncpy(response_line, buffer, bytes);
-    //     response_line[bytes] = '\0';
-    //     sendall(data->client_socket, response_line, (int *)&bytes);
-    //     // Add Connection header with keep-alive
-    //     char connection_header[25] = "Connection: close\r\n";
-    //     int connection_header_len = sizeof(connection_header) - 1;
-    //     sendall(data->client_socket, connection_header, &connection_header_len);
-    //     return bytes;
-    // }
+    if (strncmp(buffer, "HTTP/", 5) == 0) {
+        // char response_line[256];
+        // strncpy(response_line, buffer, bytes);
+        // response_line[bytes] = '\0';
+        // sendall(data->client_socket, response_line, (int *)&bytes);
+        sendall(data->client_socket, buffer, (int *)&bytes);
+        write(data->fp, buffer, bytes);
+        // Add Connection header with keep-alive
+        // char connection_header[25] = "Connection: close\r\n";
+        // int connection_header_len = sizeof(connection_header);
+        // sendall(data->client_socket, connection_header, &connection_header_len);
+        // return bytes;
+    }
 
-    // // Process desired headers
-    // if (strncasecmp(buffer, "Content-Type:", 13) == 0 ||
-    //     strncasecmp(buffer, "Content-Length:", 15) == 0) {
-    //     sendall(data->client_socket, buffer, (int *)&bytes);
-    // }
+    // Process desired headers
+    if (strncasecmp(buffer, "Content-Type:", 13) == 0 ||
+        strncasecmp(buffer, "Content-Length:", 15) == 0) {
+        sendall(data->client_socket, buffer, (int *)&bytes);
+        write(data->fp, buffer, bytes);
+    }
 
-    write(data->fp, buffer, bytes);
-    return sendall(data->client_socket, buffer, (int *)&bytes) ? 0 : bytes;
+    if ((end_ptr = strstr(buffer, "Content-Type:")))
+    {
+        int n = sprintf(new_buf, "Connection: Close\r\n\r\n");
+        write(data->fp, new_buf, (size_t) n);
+        sendall(data->client_socket, new_buf, &n);
+        // continue;
+        // snprintf(end_ptr, strlen("\r\nConnection: close"),"%s", "Connection: close\r\n");
+        // length = (int)strlen(buffer);
+        // printf("String: %s, length: %d\n", buffer, length);
+        // write(data->fp, buffer, sizeof(length));
+        // sendall(data->client_socket, buffer, &length);
+        // return sendall(data->client_socket, buffer, &length) ? 0 : bytes;
+        // return bytes;
+    }
+
+    // write(data->fp, buffer, bytes);
+    // sendall(data->client_socket, buffer, (int *)&bytes);
+
+    return bytes;
+    // return sendall(data->client_socket, buffer, (int *)&bytes) ? 0 : bytes;
 }
 
 
@@ -405,78 +422,131 @@ void connect_and_send(int *client_socket_fd) {
                 continue;
             }
 
-
+            char * hash_file;
             callback_data data = {
                     .client_socket = client_socket,
                     .status = 0,
                     // .filename = get_file_url(final_uri),
-                    .filename = get_file_url(path),
+                    // .filename = get_file_url(path),
+                    // .filename = (hash_file = get_hashed_filename(path)),
+                    .filename = (hash_file = get_file_url(path)),
                     // .url = final_uri,
                     .url = path,
                     .curl = curl,
                     .fp = -1,
                     .lock = NULL,
             };
-            
 
             if (strcmp(req_method, "GET") == 0)
             {
-                if(data.filename)
+                struct stat file_stat;
+                time_t current_time = time(NULL);
+                if(stat(data.filename, &file_stat) || current_time - file_stat.st_mtime > expire)
                 {
-                    struct stat file_stat;
-                    if (stat(data.filename, &file_stat) == -1) {
-                        perror("Error getting file information");
-                        exit(EXIT_FAILURE);
-                    }
-                    time_t current_time = time(NULL);
-                    double file_age = difftime(current_time, file_stat.st_mtime);
-                    if(file_age < expire)
-                    {
-                        data.lock = get_file_rwlock(data.filename);
-                        my_rwlock_rdlock(data.lock);
-                        data.fp = open(data.filename, O_RDONLY);
-                        // struct stat st; // REDUNDANT HERE I HAVE ONE ABOVE
-                        int num_bytes = get_fsize(data.filename, file_stat);
-                        off_t offset = 0;
-                        while(num_bytes > 0)
-                        {
-                            ssize_t sent;
-                            if(check((sent = sendfile(client_socket, data.fp, &offset, num_bytes)), "Error sending file")) break;
-                            num_bytes -= sent;
-                        }
-                        close(data.fp);
-                        my_rwlock_unlock(data.lock);
-                        continue;
-                    }
-                }
-                char * hash = get_hashed_filename(data.url);
-                char filename[256];
-                snprintf(filename, sizeof(filename), "./cache/%s", hash);
-                // printf("WRITE LOCKING FILENAME: %s\n", filename);
-                data.lock = get_file_rwlock(filename);
-                my_rwlock_wrlock(data.lock);
-                // curl_easy_setopt(curl, CURLOPT_URL, data.url);
-                curl_easy_setopt(curl, CURLOPT_URL, final_uri);
-                curl_easy_setopt(curl, CURLOPT_HEADER, 1L);
-                curl_easy_setopt(curl, CURLOPT_PROXY, "");
-                curl_easy_setopt(curl, CURLOPT_PORT, port);
-                curl_easy_setopt(curl, CURLOPT_VERBOSE, 1L);
-                // curl_easy_setopt(curl, CURLOPT_MAXCONNECTS, 5L);
-                curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, header_callback);
-                curl_easy_setopt(curl, CURLOPT_HEADERDATA, (void *) &data);
-                curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, check_and_write);
-                curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *) &data);
-                res = curl_easy_perform(curl);
-                my_rwlock_unlock(data.lock);
-                free(hash);
+                    data.fp = open(data.filename, O_CREAT | O_WRONLY | O_TRUNC, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+                    printf("Creating: %s\n", data.filename);
+                    // reget or initial get of the file
+                    // currently not writing to the cache directory
+                    data.lock = get_file_rwlock(data.filename);
+                    free(hash_file);
+                    my_rwlock_wrlock(data.lock);
+                    curl_easy_setopt(curl, CURLOPT_URL, final_uri);
+                    curl_easy_setopt(curl, CURLOPT_PROXY, "");
+                    curl_easy_setopt(curl, CURLOPT_PORT, port);
+                    curl_easy_setopt(curl, CURLOPT_VERBOSE, 1L);
+                    curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, header_callback);
+                    curl_easy_setopt(curl, CURLOPT_HEADERDATA, (void *) &data);
+                    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, check_and_write);
+                    curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *) &data);
+                    res = curl_easy_perform(curl);
+                    close(data.fp);
+                    my_rwlock_unlock(data.lock);
 
-                if (res != CURLE_OK) {
-                    printf("NOT OK");
-                    int n = sprintf(buffer, "%s 404 Not Found\r\n\r\n", req_version);
-                    sendall(client_socket, buffer, &n);
-                    continue;
-                    // break;
+                    if (res != CURLE_OK)
+                    {
+                        printf("NOT OK\n");
+                        int n = sprintf(buffer, "%s 404 Not Found\r\n\r\n", req_version);
+                        sendall(client_socket, buffer, &n);
+                        // continue;
+                    }
+                    
                 }
+                else
+                {
+                    printf("Reading: %s\n", data.filename);
+                    data.lock = get_file_rwlock(data.filename);
+                    my_rwlock_rdlock(data.lock);
+                    data.fp = open(data.filename, O_RDONLY);
+                    int num_bytes = get_fsize(data.filename, file_stat);
+                    off_t offset = 0;
+                    free(hash_file);
+                    while(num_bytes > 0)
+                    {
+                        ssize_t sent;
+                        if(check((sent = sendfile(client_socket, data.fp, &offset, num_bytes)), "Error sending file")) break;
+                        num_bytes -= sent;
+                    }
+                    close(data.fp);
+                    my_rwlock_unlock(data.lock);
+                    // continue;
+                }
+
+                // if(data.filename)
+                // {
+                    
+                //     if (stat(data.filename, &file_stat) == -1) {
+                //         perror("Error getting file information");
+                //         exit(EXIT_FAILURE);
+                //     }
+                //     time_t current_time = time(NULL);
+                //     double file_age = difftime(current_time, file_stat.st_mtime);
+                //     if(file_age < expire)
+                //     {
+                //         data.lock = get_file_rwlock(data.filename);
+                //         my_rwlock_rdlock(data.lock);
+                //         data.fp = open(data.filename, O_RDONLY);
+                //         // struct stat st; // REDUNDANT HERE I HAVE ONE ABOVE
+                //         int num_bytes = get_fsize(data.filename, file_stat);
+                //         off_t offset = 0;
+                //         while(num_bytes > 0)
+                //         {
+                //             ssize_t sent;
+                //             if(check((sent = sendfile(client_socket, data.fp, &offset, num_bytes)), "Error sending file")) break;
+                //             num_bytes -= sent;
+                //         }
+                //         close(data.fp);
+                //         my_rwlock_unlock(data.lock);
+                //         continue;
+                //     }
+                // }
+                // char * hash = get_hashed_filename(data.url);
+                // char filename[256];
+                // snprintf(filename, sizeof(filename), "./cache/%s", hash);
+                // // printf("WRITE LOCKING FILENAME: %s\n", filename);
+                // data.lock = get_file_rwlock(filename);
+                // my_rwlock_wrlock(data.lock);
+                // // curl_easy_setopt(curl, CURLOPT_URL, data.url);
+                // curl_easy_setopt(curl, CURLOPT_URL, final_uri);
+                // curl_easy_setopt(curl, CURLOPT_HEADER, 1L);
+                // curl_easy_setopt(curl, CURLOPT_PROXY, "");
+                // curl_easy_setopt(curl, CURLOPT_PORT, port);
+                // curl_easy_setopt(curl, CURLOPT_VERBOSE, 1L);
+                // // curl_easy_setopt(curl, CURLOPT_MAXCONNECTS, 5L);
+                // curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, header_callback);
+                // curl_easy_setopt(curl, CURLOPT_HEADERDATA, (void *) &data);
+                // curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, check_and_write);
+                // curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *) &data);
+                // res = curl_easy_perform(curl);
+                // my_rwlock_unlock(data.lock);
+                // free(hash);
+
+                // if (res != CURLE_OK) {
+                //     printf("NOT OK");
+                //     int n = sprintf(buffer, "%s 404 Not Found\r\n\r\n", req_version);
+                //     sendall(client_socket, buffer, &n);
+                //     continue;
+                //     // break;
+                // }
 
                 // long response_code;
                 // curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &response_code);
@@ -491,7 +561,7 @@ void connect_and_send(int *client_socket_fd) {
             } else {
                 int n = sprintf(buffer, "%s 405 Method Not Allowed\r\n\r\n", req_version);
                 sendall(client_socket, buffer, &n);
-                continue;
+                // continue;
                 // break;
             }
 
@@ -549,14 +619,18 @@ char *get_file_url(const char *path) {
     strcpy(filepath, dir);
     strcat(filepath, hashed_filename);
 
-    if (!file_exists(filepath)) {
-        return NULL;
-    }
-    else
-    {
-        return filepath;
-    }
+    return filepath;
+
+    // if (!file_exists(filepath)) {
+    //     return NULL;
+    // }
+    // else
+    // {
+    //     return filepath;
+    // }
 }
+
+
 
 void * thread_function()
 {

@@ -35,7 +35,7 @@ typedef struct {
 typedef struct {
     int client_socket;
     int status;
-    const char *filename;
+    char *filename; // add const if breaking changes occur
     const char *url;
     CURL *curl;
     int fp;
